@@ -6,4 +6,4 @@ Tweets from twitter using Tweepy API
 
 an ETL type approach and a Data Science perspective
 
-![alt text](design\design.png)
+![design](design/design.png?raw=true "design")
