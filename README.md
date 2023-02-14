@@ -1,3 +1,9 @@
-# Sentiment_Analysis
+# Data Engineering
 
-Analyzing Tweets from twitter using Tweepy, and NLTK libraries.
+Parsing, curating, conditiong and loading
+
+Tweets from twitter using Tweepy API  
+
+an ETL type approach and a Data Science perspective
+
+![alt text](design\design.png)

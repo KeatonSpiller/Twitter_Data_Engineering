@@ -88,4 +88,6 @@ Version 1.0.3 (02-13-2022)
     - Attempting to deploy an executable of the nested py files pyinstaller with anaconda ( running into library issues )
     - Plan on integrating Apache Spark in the load phase to utilized the optimized SQL facets ( need to finish seting up the Apache Spark download and will run from Python using Pyspark)
     - Plan on chaning the Twitter downloads to append to previous csv files, and not redownload historical data
+    - Plan on chaning the Twitter downloads to append to previous csv files, and not redownload historical data
+    - Also plan on deploying as a docker file aswell
     
