@@ -22,7 +22,7 @@ print(f"root directory: {os.getcwd()}", sep = '\n')
 
 # %% [markdown]
 ## Load Custom Functions
-from src.tools.twitter_tools import user_download, twitter_authentication
+from src.parse.parse_tools import user_download, twitter_authentication
 
 # %% [markdown]
 # # Twitter API Credentials

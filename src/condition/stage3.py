@@ -1,8 +1,8 @@
 # %% [markdown]
 ## Data Condition
 #       Summary Overview
-#   -
-#   -
+#   - Min Max normalize columns
+#   - Download test of today
 #   -
 
 # %% [markdown]
@@ -20,8 +20,7 @@ while(file[-1] != 'twitter_app'): # Check the working directory
 print(f"root directory: {os.getcwd()}", sep = '\n')
 
 ## Load Custom Functions
-from src.tools.twitter_tools import strip_all_words, sentence_word_probability, download_todays_test,normalize_columns,merge_files, merge_all
-
+from src.condition.condition_tools import download_todays_test,normalize_columns
 
 # %% [markdown]
 #     Load pivot data
@@ -89,5 +88,5 @@ todays_test = download_todays_test(ticker_df, df_wide, df_merge_original)
 path_todays_test = f'./data/merge/combined'
 if not os.path.exists(path_todays_test):
     os.makedirs(path_todays_test)
-df_merge.to_csv(path_todays_test +'/todays_test.csv') # Export to csv
+todays_test.to_csv(path_todays_test +'/todays_test.csv') # Export to csv
 # %%

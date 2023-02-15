@@ -1,15 +1,12 @@
 # %% [markdown]
 ## Data Load
 #       Summary Overview
-#   -
-#   -
-#   -
+#   - load data into Spark big data database
 
 # %% [markdown]
 ## Import Libraries
-import os,sys,pandas as pd,numpy as np, pyspark
+import os,sys,pandas as pd,numpy as np, findspark, os
 from pyspark.sql import SparkSession
-from pyspark import SparkContext 
 np.random.seed(0)
 
 ## Change Directory to root
@@ -23,14 +20,24 @@ print(f"root directory: {os.getcwd()}", sep = '\n')
 
 # %%
 path_todays_test = f'./data/merge/combined'
-df_merge = pd.read_csv(path_todays_test +'/todays_test.csv', parse_dates=['date']).set_index('date')
+df_merge = pd.read_csv(path_todays_test +'/index_funds_and_twitter_analysts.csv', parse_dates=['date']).set_index('date')
 
 # %% [markdown]
 ## to Spark Database
 # %%
-spark = SparkSession.builder.appName('twitter_data').getOrCreate()
-print(spark)
+os.environ["JAVA_HOME"] = "C:\Program Files\Java\jdk-19"
+os.environ["SPARK_HOME"] = "C:\spark"
+
+#%%
+
+findspark.init()
+spark = SparkSession.builder.master("local[*]").getOrCreate()
+spark.conf.set("spark.sql.repl.eagerEval.enabled", True) # Property used to format output tables better
+spark
+
+#%%
+sparkDF = spark.createDataFrame(df_merge)
+sparkDF.printSchema()
+
+sparkDF.show(truncate = True)
 # %%
-# os.environ["SPARK_HOME"] = r"C:\Users\Keaton\bigdata\spark"
-# os.environ["PYSPARK_SUBMIT_ARGS"] = "--master local[3] pyspark-shell"
-# os.environ["JAVA_HOME"] = r"C:\Java\jre1.8.0_311"

@@ -1,15 +1,13 @@
 # %% [markdown]
 ## Data Curation
 #       Summary Overview
+#   - Merge Parsed Tweets
 #   -
 #   -
-#   -
-
 
 # %% [markdown]
 ## Import Libraries
-import os,sys,tweepy,nltk,pandas as pd,numpy as np, yfinance as yf
-from datetime import date
+import os,sys,nltk,pandas as pd,numpy as np
 np.random.seed(0)
 
 # %% [markdown]
@@ -22,7 +20,7 @@ while(file[-1] != 'twitter_app'): # Check the working directory
 print(f"root directory: {os.getcwd()}", sep = '\n')
 
 ## Load Custom Functions
-from src.tools.twitter_tools import strip_all_words, sentence_word_probability, download_todays_test,normalize_columns,merge_files, merge_all
+from src.curate.curate_tools import strip_all_words, sentence_word_probability, merge_files, merge_all
 
 # %%
 with open(os.path.normpath(os.getcwd() + './user_input/user_list.xlsx'), 'rb') as f:
@@ -40,15 +38,9 @@ merge = []
 for group in groups:
     merge.append(merge_files(group, display = 0))
 df_all = merge_all('merge/merged_twitter_users', display = 0)
-# %%
-df_all.head(2)
-
-# %%
-df_all.info(verbose = True, null_counts = None, show_counts=None)
 
 # %% [markdown]
-# - Some users have infrequent tweets and span the 3600 limit over 10 years
-
+# - Some users have infrequent tweets and span the 3200 limit over 10 years
 # %%
 df_all.groupby('user')['created_at'].min().sort_values(ascending= True).head(5)
 
@@ -85,23 +77,6 @@ print(f"Tweets of Dictionaries: {len(df_all_words)}")
 print(f"all words: {len(df_all_words_count)}")
 print(f"Dictionary of all words: {len(all_count)}")
 
-# %% [markdown]
-# * Nan are tweets w/ images
-# * ',' are words removed with special cases
-
-# %%
-print(f"All the words in each individual Sentence:\n{df_all_words[0:5]}")
-
-# %%
-print(f"5 words from dictionary of all words:\n{all_count[0:5]}", end='\n\n')
-
-# %%
-print(all_count.isna().value_counts())
-
-
-# %% [markdown]
-# ## Probability of individual tweets
-
 # %%
 # Probabilities
 sentence_list, total_probability, individual_probability = sentence_word_probability(all_count, df_all_words)
@@ -119,7 +94,7 @@ df_all_prob = df_all_prob.sort_values(by=['date'], ascending=False).drop(columns
 # %%
 df_all_prob.head(2)
 
-# %%
+# %% Merge Users on same dates
 df_wide1 = df_all_prob.pivot_table(index='date', values=['favorite_count','retweet_count'], aggfunc='sum',fill_value=0 ).sort_values(by='date',ascending=False)
 df_wide2 = df_all_prob.pivot_table(index='date', columns=['user'], values=['probability'], aggfunc='sum',fill_value=0 ).sort_values(by='date',ascending=False).droplevel(0, axis=1) 
 df_wide_merge = pd.merge(df_wide1, df_wide2, how='inner', on='date')
