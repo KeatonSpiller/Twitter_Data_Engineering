@@ -26,9 +26,9 @@ from src.condition.condition_tools import download_todays_test,normalize_columns
 #     Load pivot data
 
 # %%
-path_all_merged_twitter_analysts_pivot = f'./data/merge/all_merged_twitter_users'
-df_wide = pd.read_csv(path_all_merged_twitter_analysts_pivot +'/all_merged_twitter_users_pivot.csv').astype({'date':'datetime64[ns]'}).set_index('date')
-
+path_all_merged_twitter_users_pivot = f'./data/merge/all_twitter_users'
+df_wide = pd.read_csv(path_all_merged_twitter_users_pivot +'/all_twitter_users_pivot.csv').astype({'date':'datetime64[ns]'})
+df_wide.head()
 # %%
 with open(os.path.normpath(os.getcwd() + './user_input/ticker_list.xlsx'), 'rb') as f:
     ticker_df = pd.read_excel(f, sheet_name='ticker_sheet')

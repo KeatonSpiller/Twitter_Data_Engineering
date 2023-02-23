@@ -1,7 +1,7 @@
-import os, re, pandas as pd, numpy as np, string, tweepy
+import os, pandas as pd, numpy as np, tweepy, glob, re, advertools
 np.random.seed(0)
-  
-def user_download_helper(api, userID, group):
+
+def user_download_helper(api, userID, group, display='full'):
     """_summary_
     
     Tweepy API download limit of 200 per chunk, Twitter API limit of 3200
@@ -16,21 +16,31 @@ def user_download_helper(api, userID, group):
         api (tweepy class): Handles parsing Twitter API
         userID (list of strings): twitter usernames
         group (string): label of users in list
+        display (string): 'full' -> prints user and size of tweets added or [no recent tweets]
+                          'minimal' -> prints user
+                           [any other keystroke] -> prints only the group downloading
+                           Default: 'full'
     Args output:
-        csv file in data/{group}/{username}.csv
-        {'id': 'int64',
-        'created_at': 'datetime64[ns, 'US/Eastern']', # converted to match yahoo finance EST
-        'favorite_count': 'int64',
-        'retweet_count': 'int64',
-        'url': 'object',
-        'text': 'object'}
+        csv file in data/users/{group}/{username}.csv
+        { 'id': 'int64',
+            'created_at': 'datetime64[ns, US/Eastern]',
+            'url': 'object',
+            'favorite_count': 'int64',
+            'retweet_count': 'int64',
+            'hashtags':'object',
+            'emojis': 'object',
+            'emoji_text':'object',
+            'usernames': 'object',
+            'links': 'object',
+            'text': 'object'}
     """
-    # Check if there exists previous history of user and group
+    file = f'./data/users/{group}/{userID}.csv'
+    folder = f'./data/users/{group}'
     
-    path = f'./data/{group}'
-    if os.path.exists(path):
+    # Check if there exists previous history of user and group
+    if os.path.exists(file):
         try:
-            df_history = pd.read_csv(path +'/'+ userID +'_twitter.csv', parse_dates=['created_at']).reset_index(drop=True)
+            df_history = pd.read_csv(file, parse_dates=['created_at']).reset_index(drop=True)
             oldest_id = df_history.id.min()
             since_id = df_history.id.max()
         except Exception:
@@ -41,7 +51,7 @@ def user_download_helper(api, userID, group):
     
     # If first time running
     #################################################
-    if(oldest_id == None):
+    if(oldest_id == None): 
         tweets = api.user_timeline(screen_name=userID, 
                                 count=200,
                                 include_rts = False,
@@ -95,69 +105,96 @@ def user_download_helper(api, userID, group):
                 oldest_id = tweets[-1].id
                 all_tweets.extend(tweets)
     #################################################
-    if(len(all_tweets) != 0):
-        regex = "(@[A-Za-z0-9]+)|(\w+:\/\/\S+)"
+    if(len(all_tweets) > 0):
         outtweets = []
         for tweet in all_tweets:
+            
             # encode decode
             txt = tweet.full_text
             txt = txt.encode("utf-8").decode("utf-8")
-            # remove @ and website links
-            txt = ' '.join(re.sub(regex, " ", txt).split())
-            # remove punctuation
-            txt = re.sub(f"[{re.escape(string.punctuation)}]", "", txt)
-            # remove non characters
-            txt = re.sub(f"([^A-Za-z0-9\s]+)", "", txt)
-            # store as a string
-            txt = " ".join(txt.split())
+            
             # Pull data from the tweet
             tweet_list = [
                 tweet.id_str,
                 tweet.created_at,
+                'https://twitter.com/i/web/status/' + tweet.id_str,
                 tweet.favorite_count, 
                 tweet.retweet_count,
-                'https://twitter.com/i/web/status/' + tweet.id_str,
                 txt 
             ]
             outtweets.append(tweet_list)
-        df_temp = pd.DataFrame(outtweets, columns=['id','created_at','favorite_count',\
-                                                    'retweet_count','url','text'])
+        df_temp = pd.DataFrame(outtweets, 
+                               columns=['id',
+                                        'created_at',
+                                        'url',
+                                        'favorite_count',
+                                        'retweet_count',
+                                        'text'])
+        
+        # Pulling specific txt into their own seperate columns
+        s = pd.Series(df_temp.text)
+        website = r'http\S+|www\S+'
+        username = r'@[\w]+'
+        hashtag = r'#[\w]+'
+        
+        hashtags = s.str.findall(hashtag, flags=re.IGNORECASE).str.join(" ")
+        usernames = s.str.findall(username, flags=re.IGNORECASE).str.join(" ")
+        links = s.str.findall(website, flags=re.IGNORECASE).str.join(" ")
+        
+        emoji_extraction = advertools.extract_emoji(s)
+        emojis = pd.Series(emoji_extraction['emoji']).str.join(" ")
+        emoji_text = pd.Series(emoji_extraction['emoji_text']).str.join(" ")
+        
+        df_temp.insert(5, 'hashtags', hashtags)
+        df_temp.insert(6, "emojis", emojis)
+        df_temp.insert(7, "emoji_text", emoji_text)
+        df_temp.insert(8, "usernames", usernames)
+        df_temp.insert(9, "links", links)
         
         # using dictionary to convert specific columns
         df_temp = df_temp.astype(dataframe_astypes())
         # Convert UTC to US/Eastern
         df_temp.created_at = df_temp.created_at.dt.tz_convert('US/Eastern')
         
-        # If no previous history then create file else
-        if not os.path.exists(path):
-            os.makedirs(path)
-            df_temp.to_csv(path +'/'+ userID +'_twitter.csv',index=False)
+        # If no previous folder then create folder
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+        # If no previous history then create file
+        if not os.path.exists(file):
+            df_temp.to_csv(file,index=False)
+        # else merge previous history
         else:
             df_merge = pd.concat([df_temp, df_history],
                                 axis = 0,
                                 join = 'outer',
-                                names=['id',
-                                        'created_at',
-                                        'user',
-                                        'favorite_count',
-                                        'retweet_count',
-                                        'url',
-                                        'text'],
+                                names=['id','created_at','url','user','favorite_count',
+                                        'retweet_count','url','hashtags','emojis','emoji_text',
+                                        'usernames','links','text'],
                                 ignore_index=True)
-            print(len(df_merge.id))
-            df_merge.to_csv(path +'/'+ userID +'_twitter.csv',index=False)
+            df_merge.to_csv(file,index=False)
+            
+        # print size of download
+        if(display == 'full'):
+            # if first time downloading
+            if(oldest_id == None):
+                print(f'-> {len(df_merge)} tweets downloaded', end='\n')
+            # else added tweets are not empty
+            else: 
+                print(f'-> {len(df_temp)} tweets downloaded, {len(df_merge)} total tweets', end='\n') 
     #################################################
-    else:  
-        print(f"no recent tweets")  
-             
+    else:
+        # len() of downloaded file was 0
+        if(display == 'full'):
+            print(f"-> [no recent tweets]",end='\n')       
     
-def user_download(api, user_list, group):
+def user_download(api, user_list, group, display='full'):
     """_summary_
     
     Download users within Excel list of usernames and save in a csv under data
     _why_
     
-    runs user_download_helper for each user to download tweets 
+    runs user_download_helper for each user to download tweets
+    removes csv files from user_list
     Args:
         Args input:
         api (tweepy class): Handles parsing Twitter API
@@ -165,21 +202,43 @@ def user_download(api, user_list, group):
         group (string): label of users in list
     Args output:
         csv file in data/{group}/{username}.csv
-        {'id': 'int64',
-        'created_at': 'datetime64[ns, 'US/Eastern']', # converted to match yahoo finance EST
-        'favorite_count': 'int64',
-        'retweet_count': 'int64',
-        'url': 'object',
-        'text': 'object'}
+        { 'id': 'int64',
+            'created_at': 'datetime64[ns, UTC]',
+            'url': 'object',
+            'favorite_count': 'int64',
+            'retweet_count': 'int64',
+            'hashtags':'object',
+            'emojis': 'object',
+            'emoji_text':'object',
+            'usernames': 'object',
+            'links': 'object',
+            'text': 'object'}
     """
-    
+    # Download every User from Group of User's
     for userID in user_list:
         try:
-            print(userID, end=' ')
-            user_download_helper(api, userID, group)
+            if(display == 'minimal' or display == 'full'):
+                print(userID, end=' ')
+            user_download_helper(api, userID, group, display)
         except Exception as e:
-            print (str(e))
-            
+            if(display != 'minimal' and display != 'full'):
+                print(userID, end = ' ')
+            print(f"exception: {str(e)}",
+                  f"Scenarios could include",
+                  f"- Mispelled User ID",
+                  f"- Account Removed",
+                  f"- Privated account",
+                  f"*****", sep='\n', end='\n\n')
+    
+    # if group folder exists
+    if(os.path.exists(os.path.normpath(f'./data/users/{group}'))):
+        # remove file if removed from excel spreadsheet
+        csv_files = glob.glob(os.path.join(f'./data/users/{group}', "*.csv"))
+        if(len(csv_files) > 0):
+            for file in csv_files:
+                if((str(file.split(os.sep)[-1].split(".")[0])) not in user_list):
+                    os.remove(f'{file}')
+                    
 def twitter_authentication(autentication_path):
     """_summary_
     Read in twitter api credentials stored on csv file under user_input
@@ -210,15 +269,25 @@ def dataframe_astypes():
         dictionary: column names and pandas dataframe conversions
         
         { 'id': 'int64',
-        'created_at': 'datetime64[ns, UTC]',
-        'favorite_count': 'int64',
-        'retweet_count': 'int64',
-        'url': 'object',
-        'text': 'object'}
+            'created_at': 'datetime64[ns, UTC]',
+            'url': 'object',
+            'favorite_count': 'int64',
+            'retweet_count': 'int64',
+            'hashtags':'object',
+            'emojis': 'object',
+            'emoji_text':'object',
+            'usernames': 'object',
+            'links': 'object',
+            'text': 'object'}
     """
     return { 'id': 'int64',
             'created_at': 'datetime64[ns, UTC]',
+            'url': 'object',
             'favorite_count': 'int64',
             'retweet_count': 'int64',
-            'url': 'object',
+            'hashtags':'object',
+            'emojis': 'object',
+            'emoji_text':'object',
+            'usernames': 'object',
+            'links': 'object',
             'text': 'object'}

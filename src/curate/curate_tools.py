@@ -1,7 +1,7 @@
 # %% [markdown]
 # # Import Libraries
 
-import os, glob, pandas as pd, numpy as np
+import os, glob, pandas as pd, numpy as np, re, string, timeit, texthero
 np.random.seed(0)
 
 def dataframe_astypes_curate():
@@ -13,18 +13,39 @@ def dataframe_astypes_curate():
         dictionary: column names and pandas dataframe conversions
         
         { 'id': 'int64',
-        'user': 'object',
+        'url': 'object',
         'favorite_count': 'int64',
         'retweet_count': 'int64',
-        'url': 'object',
+        'hashtags':'object',
+        'emojis': 'object',
+        'emoji_text':'object',
+        'usernames': 'object',
+        'links': 'object',
         'text': 'object'}
     """
     return { 'id': 'int64',
-            'user': 'object',
+            'url': 'object',
             'favorite_count': 'int64',
             'retweet_count': 'int64',
-            'url': 'object',
+            'hashtags':'object',
+            'emojis': 'object',
+            'emoji_text':'object',
+            'usernames': 'object',
+            'links': 'object',
             'text': 'object'}
+    
+def df_to_csv(df, folder, file):
+    """_summary_
+        Save Dataframe as a CSV in a particular folder with specified file name
+    Args:
+        df (pandas): any pandas dataframe
+        folder (string): folder location from source
+        file (string): file to name CSV file
+    """
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+    df.to_csv(folder+file, index=False)
+    return
 
 def merge_files(group, display):
     """_summary_
@@ -34,7 +55,7 @@ def merge_files(group, display):
         group (_type_): _description_
         display (_type_): _description_
     """
-    csv_files = glob.glob(os.path.join('./data'+"/"+group, "*.csv"))
+    csv_files = glob.glob(os.path.join(f'./data/users/{group}', "*.csv"))
     df = pd.DataFrame()
     for f in csv_files:
         # read the csv file
@@ -46,24 +67,23 @@ def merge_files(group, display):
             display(df_temp.iloc[0:display])
             print(df_temp.shape)
         # Merging columns of groups
-        df = pd.concat([df_temp,df], axis = 0, join = 'outer', names=['id','created_at','user','favorite_count',\
-                                                                      'retweet_count','url','text']).astype(dataframe_astypes_curate())
-        
-    print(f"size of merged data sets of {group}: {df.shape}")
-    
-    # Creating path and saving to csv
-    path_group_merge = f'./data/{group}/merge/'
-    path_merge = f'./data/merge/merged_twitter_users/'
-    if not os.path.exists(path_group_merge):
-        os.makedirs(path_group_merge)
-    if not os.path.exists(path_merge):
-        os.makedirs(path_merge)
-    df.to_csv(path_group_merge +'/merged_'+ group +'.csv',index=False)
-    df.to_csv(path_merge +'/merged_'+ group +'.csv',index=False)
+        df = pd.concat([df_temp,df], 
+                        axis = 0, 
+                        join = 'outer', 
+                        names=['id','created_at','url','user','favorite_count',
+                               'retweet_count','url','hashtags','emojis','emoji_text',
+                               'usernames','links','text']).astype(dataframe_astypes_curate())
+    if(len(df) > 0): 
+    # Always prints the complete merged size
+        print(f"{len(df)} {group} tweets")
+        # Creating folder and saving to csv
+        df_to_csv(df = df, 
+                folder = f'./data/merge/twitter_groups', 
+                file = '/merged_'+ group +'.csv')
 
     return df 
 
-def merge_all(group, display):
+def merge_all(display):
     """_summary_
     Merge all groups of Twitter user's and save merge files as csv
     _why_
@@ -72,7 +92,7 @@ def merge_all(group, display):
         userID (_type_): _description_
         group (_type_): _description_
     """
-    csv_files = glob.glob(os.path.join('./data'+"/"+group, "*.csv"))
+    csv_files = glob.glob(os.path.join('./data/merge/twitter_groups', "*.csv"))
     df = pd.DataFrame()
     for f in csv_files:
         # read the csv file
@@ -81,43 +101,67 @@ def merge_all(group, display):
         if( display > 0):
             display(df_temp.iloc[0:display])
             print(df_temp.shape)
+            
         # Merging columns of everything
-        df = pd.concat([df_temp,df], axis = 0, join = 'outer',names=['id','created_at','user','favorite_count',\
-                                                                     'retweet_count','url','text']).astype(dataframe_astypes_curate())
+        df = pd.concat([df_temp,df], 
+                    axis = 0, 
+                    join = 'outer',
+                    names=['id','created_at','url','user','favorite_count',
+                            'retweet_count','url','hashtags','emojis','emoji_text',
+                            'usernames','links','text'])
          
-    print(f"size of merged data sets of {group.split('/')[1]}: {df.shape}")
-    
-    # Creating path and saving to csv
-    path_merge = f'./data/merge/all_merged_twitter_users'
-    if not os.path.exists(path_merge):
-        os.makedirs(path_merge)
-    df.to_csv(path_merge +'/all_merged_twitter_users.csv',index=False)
-    
+    print(f"= {len(df)} total tweets")
+    if(len(df) > 0):
+        # Creating folder and saving to csv
+        df_to_csv(df = df, 
+                folder = f'./data/merge/all_twitter_users', 
+                file = '/all_twitter_users.csv')
     return df
 
-def strip_all_words(df, stop):
+def clean_text(s, words_to_remove):
     """_summary_
     grab all words from every text file, removing spaces and non nessesary words from stop list
     _why_
     Args:
-        df (_type_): _description_
-        stop (_type_): _description_
+        s (Pandas Series): Series of strings to clean
+        words_to_remove (list): list of words to remove
     """
-    s = df.text
-    # lowercase
+    
+    # normalize to lowercase
     s = s.str.lower()
-    # drop digit
-    s = s.replace('[\d]+', '',regex=True)
+    
+    # remove website(html/www) username hashtag decimal extra spaces
+    regex = r'http\S+|www\S+|@[\w]+|#[\w]+|[\d]+|[\s]{2,}'
+    s = s.str.replace(regex, "", regex=True)
+    
     # remove stop words
-    for i in stop :
-        s = s.replace(r'\b%s\b'%i, '',regex=True)
-    # remove multiple spaces
-    s = s.replace('[\s]{2,}', ' ', regex=True)
-    s = s.str.split(' ')
+    s = s.str.replace(r'(?<!\w)(?:' +'|'.join(words_to_remove) + r')(?!\w)', "", regex=True)
+    
+    # remove punctuation and library touch up
+    s = texthero.clean(s)
+    
+    # touch up remaining non characters and str split to remove leading/trailing spaces
+    s = s.str.replace(r'[^\w\s]+', "", regex=True).str.split()
+    
     return s
 
 # navigating the all merged text each twitter message for each word and comparing to frequency of word used
-def sentence_word_probability(all_word_count, series_text):
+def sentence_word_probability(relative_frequency, cleaned_text):
+    """_summary_
+    Creating the probability of each individual tweet based on all tweets (set to 1)
+    _why_
+    Args:
+        relative_frequency (_type_): _description_
+        cleaned_text (_type_): _description_
+    """
+    N = float(len(relative_frequency))
+    total_probability = [list(map(relative_frequency.get, l)) for l in cleaned_text]
+    total_probability = [sum(i)/N if(len(i) != 0) else 0 for i in total_probability ]
+        
+    return total_probability / sum(total_probability)
+
+# navigating the all merged text each twitter message for each word and comparing to frequency of word used
+def sentence_word_probability_original(all_word_count, series_text):
     """_summary_
     Creating the probability of each individual tweet based on all tweets (set to 1)
     _why_
