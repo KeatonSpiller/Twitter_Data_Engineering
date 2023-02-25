@@ -1,7 +1,7 @@
 # %% [markdown]
 # # Import Libraries
 
-import os, glob, pandas as pd, numpy as np, re, string, timeit, texthero
+import os, glob, pandas as pd, numpy as np, re, texthero
 np.random.seed(0)
 
 def dataframe_astypes_curate():
@@ -145,60 +145,105 @@ def clean_text(s, words_to_remove):
     
     return s
 
-# navigating the all merged text each twitter message for each word and comparing to frequency of word used
-def sentence_word_probability(relative_frequency, cleaned_text):
+# # navigating the all merged text each twitter message for each word and comparing to frequency of word used
+def ngram_probability(relative_frequency, cleaned_text):
     """_summary_
     Creating the probability of each individual tweet based on all tweets (set to 1)
     _why_
     Args:
         relative_frequency (_type_): _description_
         cleaned_text (_type_): _description_
-    """
-    N = float(len(relative_frequency))
-    total_probability = [list(map(relative_frequency.get, l)) for l in cleaned_text]
-    total_probability = [sum(i)/N if(len(i) != 0) else 0 for i in total_probability ]
-        
-    return total_probability / sum(total_probability)
-
-# navigating the all merged text each twitter message for each word and comparing to frequency of word used
-def sentence_word_probability_original(all_word_count, series_text):
-    """_summary_
-    Creating the probability of each individual tweet based on all tweets (set to 1)
-    _why_
-    Args:
-        all_word_count (_type_): _description_
-        series_text (_type_): _description_
-    """
-    d = all_word_count.to_dict()
-    keys, values = d.keys(), d.values()
-    sentence_list, total_probability, individual_probability = [], [], []
-    N = float(len(keys)) # N is the length of every word in the dictionary of all words used
-    
-    for i, sentence in enumerate(series_text):
-        word_freq, freq_dict, prob_dict, probability_value = {}, [], {}, 0.0
-        if( type(sentence) == list ):
-            for word in sentence:
-                if( sentence != ''):
-                    if word in keys:
-                        total_words = d[word]
-                        v = 1/total_words * 100
-                        if(word in word_freq):
-                            word_freq[word] = word_freq[word] + v
-                        else:
-                            word_freq[word] = v
-                            
-                        freq_dict.append(word_freq)
+    example
+    cleaned_text =  [cat dog cat]            (length of tweet words) = 3
+                    [shark cat]              (length of tweet words) = 2
+                    [dog lamb]               (length of tweet words) = 2
+                    
+    relative_frequency = cat   : 3 / 7 = ~.43
+                         shark : 1 / 7 = ~.14
+                         dog   : 2 / 7 = ~.29
+                         lamb  : 1 / 7 = ~.14
+                                       = 1
+    tweet_frequency =   [3/7 2/7 3/7]
+                        [1/7 3/7]
+                        [2/7 1/7]
                         
-                        if word in prob_dict:
-                            prob_dict[word] = prob_dict[word] + (v/N)
-                        else:
-                            prob_dict[word] = v/N
-                        probability_value += v
-                else:
-                    print(word)
-        # p = word / count(individual word) * 100 / len(# of all words)
-        sentence_list.append(freq_dict)
-        individual_probability.append(prob_dict)
-        total_probability.append(probability_value / N)
+    tweet_probability = [3/7 + 2/7 + 3/7] / 3 (length of tweet words)
+                        [1/7 + 3/7] / 2       (length of tweet words)
+                        [2/7 + 1/7] / 2       (length of tweet words)
+                        
+    sum(tweet_probability) =  ~.38
+                              ~.28
+                              ~.21
+                            = ~.88
+    tweet_probability / sum(tweet_probability) = ~.38 / ~.88
+                                                 ~.28 / ~.88
+                                                 ~.21 / ~.88
+                                                 
+                                               = ~.43
+                                                 ~.32
+                                                 ~.24
+                                               = 1     
+    """
+    
+    tweet_frequency = [list(map(relative_frequency.get, tweet)) for tweet in cleaned_text]
+    tweet_probability = [sum(tweet)/len(tweet) if(len(tweet) > 0) else 0.0 for tweet in tweet_frequency ]
+
+    return tweet_probability / sum(tweet_probability)
+
+# # navigating the all merged text each twitter message for each word and comparing to frequency of word used
+# def sentence_word_probability(relative_frequency, cleaned_text):
+#     """_summary_
+#     Creating the probability of each individual tweet based on all tweets (set to 1)
+#     _why_
+#     Args:
+#         relative_frequency (_type_): _description_
+#         cleaned_text (_type_): _description_
+#     """
+#     N = float(len(relative_frequency))
+#     total_probability = [list(map(relative_frequency.get, l)) for l in cleaned_text]
+#     total_probability = [sum(i)/N if(len(i) != 0) else 0 for i in total_probability ]
         
-    return sentence_list, total_probability, individual_probability
+#     return total_probability / sum(total_probability)
+
+# # navigating the all merged text each twitter message for each word and comparing to frequency of word used
+# def sentence_word_probability_original(all_word_count, series_text):
+#     """_summary_
+#     Creating the probability of each individual tweet based on all tweets (set to 1)
+#     _why_
+#     Args:
+#         all_word_count (_type_): _description_
+#         series_text (_type_): _description_
+#     """
+#     d = all_word_count.to_dict()
+#     keys, values = d.keys(), d.values()
+#     sentence_list, total_probability, individual_probability = [], [], []
+#     N = float(len(keys)) # N is the length of every word in the dictionary of all words used
+    
+#     for i, sentence in enumerate(series_text):
+#         word_freq, freq_dict, prob_dict, probability_value = {}, [], {}, 0.0
+#         if( type(sentence) == list ):
+#             for word in sentence:
+#                 if( sentence != ''):
+#                     if word in keys:
+#                         total_words = d[word]
+#                         v = 1/total_words * 100
+#                         if(word in word_freq):
+#                             word_freq[word] = word_freq[word] + v
+#                         else:
+#                             word_freq[word] = v
+                            
+#                         freq_dict.append(word_freq)
+                        
+#                         if word in prob_dict:
+#                             prob_dict[word] = prob_dict[word] + (v/N)
+#                         else:
+#                             prob_dict[word] = v/N
+#                         probability_value += v
+#                 else:
+#                     print(word)
+#         # p = word / count(individual word) * 100 / len(# of all words)
+#         sentence_list.append(freq_dict)
+#         individual_probability.append(prob_dict)
+#         total_probability.append(probability_value / N)
+        
+#     return sentence_list, total_probability, individual_probability
