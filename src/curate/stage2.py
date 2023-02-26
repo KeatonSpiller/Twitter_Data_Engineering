@@ -11,8 +11,7 @@
 
 # %% [markdown]
 # - Import Libraries
-import os, nltk, pandas as pd, numpy as np
-from nltk.util import ngrams,everygrams,skipgrams
+import os, nltk, pandas as pd, numpy as np, timeit
 
 # %% [markdown]
 # - Change Directory to top level folder
@@ -26,7 +25,7 @@ if(os.getcwd().split(os.sep)[-1] != top_level_folder):
         
 # %% [markdown]
 # - Load tools
-from src.curate.curate_tools import clean_text, ngram_probability, merge_files, merge_all, df_to_csv
+from src.curate.curate_tools import clean_text, merge_files, merge_all, df_to_csv, n_gram, unigram_probability, bigram_probability
 
 # %% [markdown]
 # - Read in groups of twitter user's to merge
@@ -68,48 +67,29 @@ words_to_remove = sorted(list( dict.fromkeys(stopwords) )) # remove duplicates
 # - extra spaces
 # - stopwords
 cleaned_text = clean_text(df_all_upperbound.text, words_to_remove)
+df_to_csv(df = cleaned_text, 
+          folder = f'./data/merge/all_twitter_users/stats', 
+          file = f'/cleaned_text.csv')
+
+
 # %%
-def n_gram(cleaned_text, n):
-           
-    grams = pd.Series([list(ngrams(tweet, n)) for tweet in cleaned_text]) 
-    
-    return grams, grams.value_counts(), grams.value_counts(normalize=True)
+# N gram, frequency, and relative frequency
+unigram_sentence, unigram_frequency, unigram_relative_frequency = n_gram(cleaned_text, 1)
+bigram_sentence, bigram_frequency, bigram_relative_frequency = n_gram(cleaned_text, 2)
+trigram_sentence, trigram_frequency, trigram_relative_frequency = n_gram(cleaned_text, 3)
 
-# Unigram Gram
-# Create a dictionary of word counts and frequency
-all_words, unigram_frequency, unigram_relative_frequency = n_gram(cleaned_text, 1)
-bigram_words, bigram_frequency, bigram_relative_frequency = n_gram(cleaned_text, 2)
-trigram_words, trigram_frequency, trigram_relative_frequency = n_gram(cleaned_text, 3)
-
-# book keeping output
-# df_stats = pd.DataFrame({'unigram_frequency':          unigram_frequency,
-#                          'unigram_relative_frequency': unigram_relative_frequency,
-#                          'bigram_frequency':           bigram_frequency,
-#                          'bigram_relative_frequency':  bigram_relative_frequency,
-#                          'trigram_frequency':          trigram_frequency,
-#                          'trigram_relative_frequency': trigram_relative_frequency})
-# df_to_csv(df = df_stats, 
-#           folder = f'./data/merge/all_twitter_users', 
-#           file = f'/stats.csv')
 # %%
-# Probabilities of twitter words spoken compared to other tweets
-
-# N Gram
-# Unigram
-unigram = ngram_probability(unigram_relative_frequency, cleaned_text)
-print(f'sum of probability column = {sum(unigram)}')
-bigram = ngram_probability(bigram_relative_frequency, cleaned_text)
-print(f'sum of probability column = {sum(unigram)}')
-trigram = ngram_probability(trigram_relative_frequency, cleaned_text)
-print(f'sum of probability column = {sum(unigram)}')
-
-# Bigram
-# Trigram
-
+# N Gram probability
+unigram_prob = unigram_probability(cleaned_text, unigram_relative_frequency)
+bigram_prob = bigram_probability(bigram_sentence, unigram_frequency, bigram_frequency)
+# %%
+# unigram_prob.reset_index(drop=True)
+bigram_prob
 # %%
 # Adding probability and frequency to the dataframe
 df_all_prob = df_all_upperbound.reset_index()
-df_all_prob['unigram_probability'] = unigram_probability
+df_all_prob['unigram_probability'] = unigram_prob.reset_index(drop=True)
+df_all_prob['bigram_probability'] = bigram_prob
 # removing empty tweets ( links removed )
 df_all_prob = df_all_prob.dropna()
 # Converting timestamp (HH:MM:SS) to Year-month-day to combine users on the same day
@@ -120,28 +100,29 @@ df_all_prob = df_all_prob.sort_values(by=['date'], ascending=False).drop(columns
 # %%
 df_all_prob.head(2)
 
-# %%
-print(sum(df_all_prob.unigram_probability / sum(df_all_prob.unigram_probability)))
-
 # %% Merge Users on same dates
 df_wide1 = df_all_prob.pivot_table(index='date', values=['favorite_count','retweet_count'], aggfunc='sum',fill_value=0 ).sort_values(by='date',ascending=False)
-df_wide2 = df_all_prob.pivot_table(index='date', columns=['user'], values=['unigram_probability'], aggfunc='sum',fill_value=0 ).sort_values(by='date',ascending=False).droplevel(0, axis=1) 
-df_wide_merge = pd.merge(df_wide1, df_wide2, how='inner', on='date')
-
-# %% [markdown]
-# - Merging Sat/Sun Tweets to Monday and re-merging to data
+df_wide2 = df_all_prob.pivot_table(index='date', columns=['user'], values=['unigram_probability','bigram_probability'], aggfunc='sum',fill_value=0 ).sort_values(by='date',ascending=False).droplevel(0, axis=1) 
+df_wide = pd.merge(df_wide1, df_wide2, how='inner', on='date')
 
 # %%
-# Drop Saturday-Monday And replace with Monday
-# week_end_mask = df_wide_merge.reset_index().date.dt.day_name().isin(['Saturday', 'Sunday', 'Monday'])
-# week_end = df_wide_merge.reset_index().loc[week_end_mask, :]
-# monday_group = week_end.groupby([pd.Grouper(key='date', freq='W-MON')])[df_wide_merge.columns].sum().reset_index('date')
-# # Apply the stripped mask
-# df_wide_stripped = df_wide_merge.reset_index().loc[~ week_end_mask, :]
-# df_wide = pd.merge(df_wide_stripped, monday_group, how='outer').set_index('date')
-
-# %%
-df_to_csv(df = df_wide_merge, 
+df_to_csv(df = df_wide, 
           folder = f'./data/merge/all_twitter_users', 
           file = f'/all_twitter_users_pivot.csv')
-df_wide_merge.head(5)
+df_wide.head(5)
+
+# # %% [markdown]
+# # - To combine Sat/Sun Tweets with Monday
+# week_end_mask = df_wide.reset_index().date.dt.day_name().isin(['Saturday', 'Sunday', 'Monday'])
+# week_end = df_wide.reset_index().loc[week_end_mask, :]
+# monday_group = week_end.groupby([pd.Grouper(key='date', freq='W-MON')])[df_wide.columns].sum().reset_index('date')
+# # Apply the stripped mask
+# df_wide_stripped = df_wide.reset_index().loc[~ week_end_mask, :]
+# df_wide_wknd_merge = pd.merge(df_wide_stripped, monday_group, how='outer').set_index('date')
+
+# # %%
+# df_to_csv(df = df_wide_wknd_merge, 
+#           folder = f'./data/merge/all_twitter_users', 
+#           file = f'/all_twitter_users_pivot_wkd_merge.csv')
+# df_wide_wknd_merge.head(5)
+# # %%

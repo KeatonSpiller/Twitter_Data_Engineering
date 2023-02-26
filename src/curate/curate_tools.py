@@ -1,8 +1,8 @@
 # %% [markdown]
 # # Import Libraries
 
-import os, glob, pandas as pd, numpy as np, re, texthero
-np.random.seed(0)
+import os, glob, pandas as pd, numpy as np, re, texthero, collections, itertools
+from nltk.util import ngrams,everygrams,skipgrams
 
 def dataframe_astypes_curate():
     """_summary_
@@ -145,14 +145,14 @@ def clean_text(s, words_to_remove):
     
     return s
 
-# # navigating the all merged text each twitter message for each word and comparing to frequency of word used
-def ngram_probability(relative_frequency, cleaned_text):
+def relative_probability(relative_frequency, cleaned_text):
     """_summary_
     Creating the probability of each individual tweet based on all tweets (set to 1)
     _why_
     Args:
-        relative_frequency (_type_): _description_
-        cleaned_text (_type_): _description_
+        relative_frequency (Series): _description_
+        cleaned_text (Series): _description_
+        
     example
     cleaned_text =  [cat dog cat]            (length of tweet words) = 3
                     [shark cat]              (length of tweet words) = 2
@@ -190,60 +190,68 @@ def ngram_probability(relative_frequency, cleaned_text):
 
     return tweet_probability / sum(tweet_probability)
 
-# # navigating the all merged text each twitter message for each word and comparing to frequency of word used
-# def sentence_word_probability(relative_frequency, cleaned_text):
-#     """_summary_
-#     Creating the probability of each individual tweet based on all tweets (set to 1)
-#     _why_
-#     Args:
-#         relative_frequency (_type_): _description_
-#         cleaned_text (_type_): _description_
-#     """
-#     N = float(len(relative_frequency))
-#     total_probability = [list(map(relative_frequency.get, l)) for l in cleaned_text]
-#     total_probability = [sum(i)/N if(len(i) != 0) else 0 for i in total_probability ]
-        
-#     return total_probability / sum(total_probability)
+def n_gram(cleaned_text, n):
+    """_summary_
 
-# # navigating the all merged text each twitter message for each word and comparing to frequency of word used
-# def sentence_word_probability_original(all_word_count, series_text):
-#     """_summary_
-#     Creating the probability of each individual tweet based on all tweets (set to 1)
-#     _why_
-#     Args:
-#         all_word_count (_type_): _description_
-#         series_text (_type_): _description_
-#     """
-#     d = all_word_count.to_dict()
-#     keys, values = d.keys(), d.values()
-#     sentence_list, total_probability, individual_probability = [], [], []
-#     N = float(len(keys)) # N is the length of every word in the dictionary of all words used
+    Args:
+        cleaned_text (Pandas Series): _description_
+        n (integar): number of grams wanted
+    Returns:
+        grams, frequency and relative frequency Pandas Series
+        ouputs csv files to to stats folder 
+    """
+    grams = pd.Series(cleaned_text.apply(lambda tweet: list(ngrams(tweet, n))))
+    frequency = pd.Series(collections.Counter(list(itertools.chain.from_iterable(grams))))
+    relative_frequency = frequency / len(frequency)
     
-#     for i, sentence in enumerate(series_text):
-#         word_freq, freq_dict, prob_dict, probability_value = {}, [], {}, 0.0
-#         if( type(sentence) == list ):
-#             for word in sentence:
-#                 if( sentence != ''):
-#                     if word in keys:
-#                         total_words = d[word]
-#                         v = 1/total_words * 100
-#                         if(word in word_freq):
-#                             word_freq[word] = word_freq[word] + v
-#                         else:
-#                             word_freq[word] = v
-                            
-#                         freq_dict.append(word_freq)
-                        
-#                         if word in prob_dict:
-#                             prob_dict[word] = prob_dict[word] + (v/N)
-#                         else:
-#                             prob_dict[word] = v/N
-#                         probability_value += v
-#                 else:
-#                     print(word)
-#         # p = word / count(individual word) * 100 / len(# of all words)
-#         sentence_list.append(freq_dict)
-#         individual_probability.append(prob_dict)
-#         total_probability.append(probability_value / N)
+    # book keeping output
+    df_to_csv(df = grams, 
+            folder = f'./data/merge/all_twitter_users/stats', 
+            file = f'/{n}_grams.csv')
+    df_to_csv(df = frequency.reset_index(), 
+            folder = f'./data/merge/all_twitter_users/stats', 
+            file = f'/{n}_gram_frequency.csv')
+    df_to_csv(df = relative_frequency.reset_index(), 
+            folder = f'./data/merge/all_twitter_users/stats', 
+            file = f'/{n}_gram_relative_frequency.csv')
+    
+    return grams, frequency, relative_frequency
+
+# Probabilities of N gram twitter words spoken compared to other tweets
+def bigram_probability(bigram_sentence, unigram_frequency, bigram_frequency):
+    """_summary_
+    Creating the probability of each individual tweet based on all tweets (set to 1)
+    _why_
+    Args:
+        relative_frequency (Series): _description_
+        cleaned_text (Series): _description_
         
-#     return sentence_list, total_probability, individual_probability
+    P(students are from vallore)
+    Bigram = P(are|students)*P(from|are)*P(vallore|from)
+    P(are|students) = count(students|are)/count(students)
+    """
+    # start = timeit.default_timer()
+    # stop = timeit.default_timer()
+    # print('Time: ', stop - start)  
+     
+    total_probability = [(np.prod([bigram_frequency[tup]/unigram_frequency[tup[0]] for tup in sentence])) for sentence in bigram_sentence]
+    
+    # total_probability = cleaned_text.apply(lambda tweet: np.prod(list(map(relative_frequency.get, tweet))))
+    return total_probability
+
+# Probabilities of N gram twitter words spoken compared to other tweets
+def unigram_probability(cleaned_text, unigram_relative_frequency):
+    """_summary_
+    Creating the probability of each individual tweet based on all tweets (set to 1)
+    _why_
+    Args:
+        relative_frequency (Series): _description_
+        cleaned_text (Series): _description_
+        
+    P(students are from vallore)
+    Bigram = P(are|students)*P(from|are)*P(vallore|from)
+    P(are|students) = count(students|are)/count(students)
+    """
+    total_probability = cleaned_text.apply(lambda tweet: np.prod(list(map(unigram_relative_frequency.get, tweet))))
+   
+    return total_probability
