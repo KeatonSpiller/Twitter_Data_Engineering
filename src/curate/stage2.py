@@ -12,6 +12,7 @@
 # %% [markdown]
 # - Import Libraries
 import os, nltk, pandas as pd, numpy as np, timeit
+import shelve
 
 # %% [markdown]
 # - Change Directory to top level folder
@@ -71,7 +72,6 @@ df_to_csv(df = cleaned_text,
           folder = f'./data/merge/all_twitter_users/stats', 
           file = f'/cleaned_text.csv')
 
-
 # %%
 # N gram, frequency, and relative frequency
 unigram_sentence, unigram_frequency, unigram_relative_frequency = n_gram(cleaned_text, 1)
@@ -79,12 +79,20 @@ bigram_sentence, bigram_frequency, bigram_relative_frequency = n_gram(cleaned_te
 trigram_sentence, trigram_frequency, trigram_relative_frequency = n_gram(cleaned_text, 3)
 
 # %%
+# probability matrix
+# column = list(unigram_frequency.index)
+# prob_matrix = np.diag(unigram_frequency.to_numpy(dtype='int32'))
+# Add Binomials to matrix
+# print(prob_matrix)
+
+# %% [markdown]
+# $$ P(W_{1:n})\approx\prod_{k=1}^n P(W_{k}|W_{k-1}) $$
+# $$ P(W_{n}|W_{n-1}) =  \dfrac{C(W_{n-1}W{n})}{C(W{n-1})} $$
+# %%
 # N Gram probability
 unigram_prob = unigram_probability(cleaned_text, unigram_relative_frequency)
-bigram_prob = bigram_probability(bigram_sentence, unigram_frequency, bigram_frequency)
-# %%
-# unigram_prob.reset_index(drop=True)
-bigram_prob
+bigram_prob = bigram_probability(bigram_sentence, unigram_frequency, bigram_frequency, cleaned_text)
+
 # %%
 # Adding probability and frequency to the dataframe
 df_all_prob = df_all_upperbound.reset_index()
@@ -96,13 +104,25 @@ df_all_prob = df_all_prob.dropna()
 df_all_prob.insert(loc = 0, column = 'date', value = pd.to_datetime(df_all_prob['created_at']).apply(lambda x: x.strftime('%Y-%m-%d')))
 df_all_prob.date = pd.to_datetime(df_all_prob['date'], format='%Y-%m-%d')
 df_all_prob = df_all_prob.sort_values(by=['date'], ascending=False).drop(columns=['index'])
-
+df_to_csv(df = df_all_prob, 
+          folder = f'./data/merge/all_twitter_users', 
+          file = f'/all_twitter_users_ngram.csv')
 # %%
 df_all_prob.head(2)
 
 # %% Merge Users on same dates
-df_wide1 = df_all_prob.pivot_table(index='date', values=['favorite_count','retweet_count'], aggfunc='sum',fill_value=0 ).sort_values(by='date',ascending=False)
-df_wide2 = df_all_prob.pivot_table(index='date', columns=['user'], values=['unigram_probability','bigram_probability'], aggfunc='sum',fill_value=0 ).sort_values(by='date',ascending=False).droplevel(0, axis=1) 
+df_wide1 = df_all_prob.pivot_table(index='date', 
+                                   values=['favorite_count','retweet_count'], 
+                                   aggfunc='sum',
+                                   fill_value=0).sort_values(by='date',
+                                                            ascending=False)
+df_wide2 = df_all_prob.pivot_table(index='date', 
+                                   columns=['user'],
+                                   values=['unigram_probability','bigram_probability'], 
+                                   aggfunc={unigram_probability: 'sum',
+                                            bigram_probability: 'sum'},
+                                   fill_value=0 ).sort_values(by='date',
+                                                              ascending=False).droplevel(0, axis=1) 
 df_wide = pd.merge(df_wide1, df_wide2, how='inner', on='date')
 
 # %%
