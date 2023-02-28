@@ -11,8 +11,8 @@
 
 # %% [markdown]
 # - Import Libraries
-import os, nltk, pandas as pd, numpy as np, timeit
-import shelve
+import os, nltk, pandas as pd, numpy as np, skfda
+from gensim.models import Word2Vec
 
 # %% [markdown]
 # - Change Directory to top level folder
@@ -55,7 +55,7 @@ df_all_upperbound = df_all[df_all.created_at > threshold]
 # %% [markdown]
 # - non significant words to remove
 stopwords = nltk.corpus.stopwords.words("english") 
-nonessential_words = ['twitter', 'birds','lists','list', 'source', 'am', 'pm']
+nonessential_words = ['twitter', 'birds','lists','list', 'source', 'am', 'pm', 'nan']
 stopwords.extend(nonessential_words) # merge two lists together
 words_to_remove = sorted(list( dict.fromkeys(stopwords) )) # remove duplicates
 
@@ -73,6 +73,22 @@ df_to_csv(df = cleaned_text,
           file = f'/cleaned_text.csv')
 
 # %%
+# cluster similar words with word_to_vec and unsupervised clustering
+word_vector = Word2Vec(cleaned_text,size=100, min_count=1)
+
+# %%
+# emb_df = (
+#     pd.DataFrame(
+#         [word_vector.wv.get_vector(str(n)) for n in word_vector.wv.key_to_index],
+#         index = word_vector.wv.key_to_index
+#     )
+# )
+# print(emb_df.shape)
+
+# fuzzy_c = skfda.ml.clustering.FuzzyCMeans(random_state=0)
+# fuzzy_c.fit(emb_df)
+
+# %%
 # N gram, frequency, and relative frequency
 unigram_sentence, unigram_frequency, unigram_relative_frequency = n_gram(cleaned_text, 1)
 bigram_sentence, bigram_frequency, bigram_relative_frequency = n_gram(cleaned_text, 2)
@@ -84,14 +100,15 @@ trigram_sentence, trigram_frequency, trigram_relative_frequency = n_gram(cleaned
 # prob_matrix = np.diag(unigram_frequency.to_numpy(dtype='int32'))
 # Add Binomials to matrix
 # print(prob_matrix)
-
+  
 # %% [markdown]
+# N Gram probability
 # $$ P(W_{1:n})\approx\prod_{k=1}^n P(W_{k}|W_{k-1}) $$
 # $$ P(W_{n}|W_{n-1}) =  \dfrac{C(W_{n-1}W{n})}{C(W{n-1})} $$
-# %%
-# N Gram probability
 unigram_prob = unigram_probability(cleaned_text, unigram_relative_frequency)
 bigram_prob = bigram_probability(bigram_sentence, unigram_frequency, bigram_frequency, cleaned_text)
+# %%
+print(bigram_prob)
 
 # %%
 # Adding probability and frequency to the dataframe

@@ -216,28 +216,43 @@ def n_gram(cleaned_text, n):
             file = f'/{n}_gram_relative_frequency.csv')
     
     return grams, frequency, relative_frequency
-
-# Probabilities of N gram twitter words spoken compared to other tweets
-def bigram_probability(bigram_sentence, unigram_frequency, bigram_frequency):
+# %% [markdown]
+# $$ P(W_{1:n})\approx\prod_{k=1}^n P(W_{k}|W_{k-1}) $$
+# $$ P(W_{n}|W_{n-1}) =  \dfrac{C(W_{n-1}W{n})}{C(W{n-1})} $$
+def bigram_probability(bigram_sentence, unigram_frequency, bigram_frequency, cleaned_text):
     """_summary_
     Creating the probability of each individual tweet based on all tweets (set to 1)
     _why_
     Args:
-        relative_frequency (Series): _description_
+        bigram_sentence (Series): _description_
+        unigram_frequency (Series): _description_
+        bigram_frequency (Series): _description_
         cleaned_text (Series): _description_
-        
-    P(students are from vallore)
-    Bigram = P(are|students)*P(from|are)*P(vallore|from)
-    P(are|students) = count(students|are)/count(students)
-    """
-    # start = timeit.default_timer()
-    # stop = timeit.default_timer()
-    # print('Time: ', stop - start)  
-     
-    total_probability = [(np.prod([bigram_frequency[tup]/unigram_frequency[tup[0]] for tup in sentence])) for sentence in bigram_sentence]
+    ex.  
+    P(<s> i want english food </s>)
+    = P(i|<s>)P(want|i)P(english|want)P(food|english)P(</s>|food)
     
-    # total_probability = cleaned_text.apply(lambda tweet: np.prod(list(map(relative_frequency.get, tweet))))
-    return total_probability
+    # count of i followed by want divided by all i
+    P(want|i) = Count(i|want)/ Count(i) 
+    # words beginning with i divided by count of sentences
+    P(i|<s>) = Count(<s>|i)/ Count(<s>) 
+    # words ending with food divided by count of sentences
+    P(<s>|food) = Count(<s>|food)/ Count(<s>) 
+    """
+    # acount for beginning and ending values P(word|<s>) (</s>|word)
+    beginning_words, ending_words = cleaned_text.str[0], cleaned_text.str[-1]
+    beginning_words_dict, ending_words_dict= beginning_words.value_counts(), ending_words.value_counts()
+
+    bigram_prob = []
+    for i, sentence in enumerate(bigram_sentence):
+        if sentence:
+            begin_prob = (beginning_words_dict[beginning_words[i:i+1]]/len(cleaned_text)).to_numpy()
+            end_prob = (ending_words_dict[ending_words[i:i+1]]/len(cleaned_text)).to_numpy()
+            bigram_prob.append(np.prod(np.append([bigram_frequency[tup]/unigram_frequency[tup[0]] for tup in sentence], (begin_prob * end_prob) )))
+        else:
+            bigram_prob.append(0)
+            
+    return bigram_prob
 
 # Probabilities of N gram twitter words spoken compared to other tweets
 def unigram_probability(cleaned_text, unigram_relative_frequency):
