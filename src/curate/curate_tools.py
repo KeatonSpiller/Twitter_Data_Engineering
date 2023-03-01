@@ -1,7 +1,7 @@
 # %% [markdown]
 # # Import Libraries
 
-import os, glob, pandas as pd, numpy as np, re, texthero, collections, itertools, emoji
+import os, glob, pandas as pd, numpy as np, re, texthero, collections, itertools, emoji, math
 from nltk.util import ngrams,everygrams,skipgrams
 from nltk.stem.snowball import SnowballStemmer
 from easynmt import EasyNMT
@@ -141,25 +141,50 @@ def clean_text(s, words_to_remove):
     # replace emoji
     s = s.apply(lambda s: emoji.replace_emoji(s, ''))
     
-    # translate to english from 186 languages Helsinki-NLP
-    model = EasyNMT("opus-mt", max_length = s.str.len().max())
-    s = s.apply(lambda x: model.translate(x, target_lang="en", max_length=len(x))) 
+    # translate to english from 186 languages Helsinki-NLP -> opus-mt | m2m_100_1.2B | mBART50_m2m
+    # opus-mt 512 token limit per sentence -> all others 1024 
+    # model = EasyNMT(model_name = "opus-mt")
+    # print(s.str.len().max())
+    # print(s.str.len().idxmax())
+    # print(s[s.str.len().idxmax()])
     
+    # def sentence_overflow(x):
+    #     size = len(x)
+    #     sentence = []
+    #     if(size > 128):
+    #         sentence = model.translate(x[0:128], target_lang="en")
+    #         sentence = sentence + model.translate(x[128:size], target_lang="en", show_progress_bar=False)
+    #     else:
+    #        sentence = model.translate(x, target_lang="en", show_progress_bar=False)
+    #     return sentence 
+    
+    # s = s.apply(lambda x: sentence_overflow(x) )
+    # # chunk_size = math.ceil(s.str.len().max() / 512)
+    # # s = s.apply(lambda row: 
+    # #             list(model.translate_stream(row, 
+    # #                                         show_progress_bar=False, 
+    # #                                         target_lang="en",
+    # #                                         chunk_size=128)))
+    # print(s.str.len().max())
+    # print(s.str.len().idxmax())
+    # for translation in model.translate_stream(s, show_progress_bar=False, chunk_size=128, target_lang='en'):
+    #     print(translation)
+
     # remove punctuation and library touch up
     s = texthero.clean(s)
     
     # touch up remaining non characters and str split to remove leading/trailing spaces
     s = s.str.replace(r'[^\w\s]+', "", regex=True).str.split()
     
-    # stemming -> 'like' 'liked' 'liking' to 'like' 'like 'like
+    # stemming similar words -> 'like' 'liked' 'liking' to stem:'lik'
     stemmer = SnowballStemmer("english")
-    s = s.apply(lambda x: [stemmer.stem(y) for y in x])
+    stemmed = s.apply(lambda x: [stemmer.stem(y) for y in x])
     
     # If I wish to filter frequency
     # filter out infrequent ( words used 1 or 2 times )
     # filter out frequent ( words used more than 1000 times?)
     
-    return s
+    return stemmed, s
 
 def relative_probability(relative_frequency, cleaned_text):
     """_summary_
@@ -236,7 +261,7 @@ def n_gram(cleaned_text, n):
 # %% [markdown]
 # $$ P(W_{1:n})\approx\prod_{k=1}^n P(W_{k}|W_{k-1}) $$
 # $$ P(W_{n}|W_{n-1}) =  \dfrac{C(W_{n-1}W{n})}{C(W{n-1})} $$
-def bigram_probability(bigram_sentence, unigram_frequency, bigram_frequency, cleaned_text):
+def bigram_probability(cleaned_text, bigram_sentence, unigram_frequency, bigram_frequency):
     """_summary_
     Creating the probability of each individual tweet based on all tweets (set to 1)
     _why_

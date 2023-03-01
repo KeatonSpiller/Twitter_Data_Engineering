@@ -11,14 +11,15 @@ import os,sys,pandas as pd,numpy as np, glob, shutil
 np.random.seed(0)
 
 # %% [markdown]
-## Change Directory to root
-file = os.getcwd().split(os.sep)
-while(file[-1] != 'twitter_app'): # Check the working directory
-    os.chdir('..')
-    file = os.getcwd().split(os.sep)
-    sys.path.append(os.path.abspath(os.getcwd()))
-print(f"root directory: {os.getcwd()}", sep = '\n')
-
+# - Change Directory to top level folder
+top_level_folder = 'twitter_app'
+if(os.getcwd().split(os.sep)[-1] != top_level_folder):
+    try:
+        os.chdir('../..')
+        print(f"cwd: {os.getcwd()}", sep = '\n')
+    except Exception as e:
+        print(f"{e}\n:start current working directory from {top_level_folder}")
+  
 # %% [markdown]
 ## Load Custom Functions
 from src.parse.parse_tools import user_download, twitter_authentication

@@ -6,14 +6,14 @@
 #   - Normalize and clean data
 #   - Create dictionaries from words spoken
 #   - Create probabilities of words used per user
-#   - pivot tweets to show users on same days
-#   - merge tweets from weekend to monday
 
 # %% [markdown]
 # - Import Libraries
-import os, nltk, pandas as pd, numpy as np, skfda, string
+import os, nltk, pandas as pd, numpy as np, skfda, string, texthero, emoji, math
 from gensim.models import Word2Vec
 from nltk.stem.snowball import SnowballStemmer
+from easynmt import EasyNMT
+
 # %% [markdown]
 # - Change Directory to top level folder
 top_level_folder = 'twitter_app'
@@ -48,7 +48,7 @@ df_all = merge_all(display = 0)
 df_all.groupby('user')['created_at'].min().sort_values(ascending= True).head(5)
 
 # %% [markdown]
-# - Bounds to drop old tweets if neccesary
+# - Drop old tweets below threshold
 threshold = '2017-01-01'
 df_all_upperbound = df_all[df_all.created_at > threshold]
 
@@ -59,20 +59,21 @@ stopwords = nltk.corpus.stopwords.words("english") + nonessential_words
 words_to_remove = sorted(list( dict.fromkeys(stopwords) )) # remove duplicates
 
 # %% [markdown]
-# - Cleaning up Data and Creating a Dictionary words spoken
-# - removed websites(html/www)
-# - usernames 
-# - hashtags 
-# - digits
-# - extra spaces
-# - stopwords
-# - replace emoji
+# - Cleaning up tweet sentences
+# - websites(html/www)
+# - usernames | hashtags | digits
+# - extra spaces | stopwords | emoji
+# - punctuation (texthero)
 # - translate to english from 186 languages Helsinki-NLP
-# - stemming similar words -> 'like' 'liked' 'liking' to 'like' 'like 'like'
-cleaned_text = clean_text(df_all_upperbound.text, words_to_remove)
-df_to_csv(df = cleaned_text, 
+# - stemming similar words -> 'like' 'liked' 'liking' to stem:'lik'
+stem_text, nonstem_text = clean_text(df_all_upperbound.text[0:10000], words_to_remove)
+
+df_to_csv(df = stem_text, 
           folder = f'./data/merge/all_twitter_users/stats', 
-          file = f'/cleaned_text.csv')
+          file = f'/cleaned_text_stem.csv')
+df_to_csv(df = nonstem_text, 
+          folder = f'./data/merge/all_twitter_users/stats', 
+          file = f'/cleaned_text_nonstem.csv')
 
 # %% [markdown] 
 # - Combine similar words to reduce Probability computation
@@ -90,15 +91,14 @@ df_to_csv(df = cleaned_text,
 #     )
 # )
 # print(emb_df.shape)
-
 # fuzzy_c = skfda.ml.clustering.FuzzyCMeans(random_state=0)
 # fuzzy_c.fit(emb_df)
 
 # %%
 # N gram, frequency, and relative frequency bag of words
-unigram_sentence, unigram_frequency, unigram_relative_frequency = n_gram(cleaned_text, 1)
-bigram_sentence, bigram_frequency, bigram_relative_frequency = n_gram(cleaned_text, 2)
-# trigram_sentence, trigram_frequency, trigram_relative_frequency = n_gram(cleaned_text, 3)
+unigram_sentence, unigram_frequency, unigram_relative_frequency = n_gram(stem_text, 1)
+bigram_sentence, bigram_frequency, bigram_relative_frequency = n_gram(stem_text, 2)
+trigram_sentence, trigram_frequency, trigram_relative_frequency = n_gram(stem_text, 3)
 
 # %%
 # probability matrix
@@ -111,15 +111,15 @@ bigram_sentence, bigram_frequency, bigram_relative_frequency = n_gram(cleaned_te
 # N Gram probability
 # $$ P(W_{1:n})\approx\prod_{k=1}^n P(W_{k}|W_{k-1}) $$
 # $$ P(W_{n}|W_{n-1}) =  \dfrac{C(W_{n-1}W{n})}{C(W{n-1})} $$
-unigram_prob = unigram_probability(cleaned_text, unigram_relative_frequency)
-bigram_prob = bigram_probability(bigram_sentence, unigram_frequency, bigram_frequency, cleaned_text)
+unigram_prob = unigram_probability(stem_text, unigram_relative_frequency)
+bigram_prob = bigram_probability(stem_text, bigram_sentence, unigram_frequency, bigram_frequency)
 
 # %%
-# Adding probability and frequency to the dataframe
+# Adding ngram probability to the dataframe
 df_all_prob = df_all_upperbound.reset_index()
 df_all_prob['unigram_probability'] = unigram_prob.reset_index(drop=True)
 df_all_prob['bigram_probability'] = bigram_prob
-# removing empty tweets ( links removed )
+# removing empty tweets
 df_all_prob = df_all_prob.dropna()
 # Converting timestamp (HH:MM:SS) to Year-month-day to combine users on the same day
 df_all_prob.insert(loc = 0, column = 'date', value = pd.to_datetime(df_all_prob['created_at']).apply(lambda x: x.strftime('%Y-%m-%d')))
@@ -130,40 +130,3 @@ df_to_csv(df = df_all_prob,
           file = f'/all_twitter_users_ngram.csv')
 # %%
 df_all_prob.head(2)
-
-# %% Merge Users on same dates
-df_wide1 = df_all_prob.pivot_table(index='date', 
-                                   values=['favorite_count','retweet_count'], 
-                                   aggfunc='sum',
-                                   fill_value=0).sort_values(by='date',
-                                                            ascending=False)
-df_wide2 = df_all_prob.pivot_table(index='date', 
-                                   columns=['user'],
-                                   values=['unigram_probability','bigram_probability'], 
-                                   aggfunc={unigram_probability: 'sum',
-                                            bigram_probability: 'sum'},
-                                   fill_value=0 ).sort_values(by='date',
-                                                              ascending=False).droplevel(0, axis=1) 
-df_wide = pd.merge(df_wide1, df_wide2, how='inner', on='date')
-
-# %%
-df_to_csv(df = df_wide, 
-          folder = f'./data/merge/all_twitter_users', 
-          file = f'/all_twitter_users_pivot.csv')
-df_wide.head(5)
-
-# # %% [markdown]
-# # - To combine Sat/Sun Tweets with Monday
-# week_end_mask = df_wide.reset_index().date.dt.day_name().isin(['Saturday', 'Sunday', 'Monday'])
-# week_end = df_wide.reset_index().loc[week_end_mask, :]
-# monday_group = week_end.groupby([pd.Grouper(key='date', freq='W-MON')])[df_wide.columns].sum().reset_index('date')
-# # Apply the stripped mask
-# df_wide_stripped = df_wide.reset_index().loc[~ week_end_mask, :]
-# df_wide_wknd_merge = pd.merge(df_wide_stripped, monday_group, how='outer').set_index('date')
-
-# # %%
-# df_to_csv(df = df_wide_wknd_merge, 
-#           folder = f'./data/merge/all_twitter_users', 
-#           file = f'/all_twitter_users_pivot_wkd_merge.csv')
-# df_wide_wknd_merge.head(5)
-# # %%

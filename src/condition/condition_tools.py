@@ -1,8 +1,21 @@
 # %% [markdown]
 # # Import Libraries
 
-import pandas as pd,numpy as np, yfinance as yf
+import pandas as pd,numpy as np, yfinance as yf, os
 np.random.seed(0)
+
+def df_to_csv(df, folder, file):
+    """_summary_
+        Save Dataframe as a CSV in a particular folder with specified file name
+    Args:
+        df (pandas): any pandas dataframe
+        folder (string): folder location from source
+        file (string): file to name CSV file
+    """
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+    df.to_csv(folder+file, index=False)
+    return 
 
 def normalize_columns(df, columns):
     """_summary_
