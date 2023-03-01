@@ -1,8 +1,10 @@
 # %% [markdown]
 # # Import Libraries
 
-import os, glob, pandas as pd, numpy as np, re, texthero, collections, itertools
+import os, glob, pandas as pd, numpy as np, re, texthero, collections, itertools, emoji
 from nltk.util import ngrams,everygrams,skipgrams
+from nltk.stem.snowball import SnowballStemmer
+from easynmt import EasyNMT
 
 def dataframe_astypes_curate():
     """_summary_
@@ -126,7 +128,6 @@ def clean_text(s, words_to_remove):
         s (Pandas Series): Series of strings to clean
         words_to_remove (list): list of words to remove
     """
-    
     # normalize to lowercase
     s = s.str.lower()
     
@@ -137,11 +138,26 @@ def clean_text(s, words_to_remove):
     # remove stop words
     s = s.str.replace(r'(?<!\w)(?:' +'|'.join(words_to_remove) + r')(?!\w)', "", regex=True)
     
+    # replace emoji
+    s = s.apply(lambda s: emoji.replace_emoji(s, ''))
+    
+    # translate to english from 186 languages Helsinki-NLP
+    model = EasyNMT("opus-mt", max_length = s.str.len().max())
+    s = s.apply(lambda x: model.translate(x, target_lang="en", max_length=len(x))) 
+    
     # remove punctuation and library touch up
     s = texthero.clean(s)
     
     # touch up remaining non characters and str split to remove leading/trailing spaces
     s = s.str.replace(r'[^\w\s]+', "", regex=True).str.split()
+    
+    # stemming -> 'like' 'liked' 'liking' to 'like' 'like 'like
+    stemmer = SnowballStemmer("english")
+    s = s.apply(lambda x: [stemmer.stem(y) for y in x])
+    
+    # If I wish to filter frequency
+    # filter out infrequent ( words used 1 or 2 times )
+    # filter out frequent ( words used more than 1000 times?)
     
     return s
 
@@ -216,6 +232,7 @@ def n_gram(cleaned_text, n):
             file = f'/{n}_gram_relative_frequency.csv')
     
     return grams, frequency, relative_frequency
+
 # %% [markdown]
 # $$ P(W_{1:n})\approx\prod_{k=1}^n P(W_{k}|W_{k-1}) $$
 # $$ P(W_{n}|W_{n-1}) =  \dfrac{C(W_{n-1}W{n})}{C(W{n-1})} $$

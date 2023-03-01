@@ -11,9 +11,9 @@
 
 # %% [markdown]
 # - Import Libraries
-import os, nltk, pandas as pd, numpy as np, skfda
+import os, nltk, pandas as pd, numpy as np, skfda, string
 from gensim.models import Word2Vec
-
+from nltk.stem.snowball import SnowballStemmer
 # %% [markdown]
 # - Change Directory to top level folder
 top_level_folder = 'twitter_app'
@@ -54,9 +54,8 @@ df_all_upperbound = df_all[df_all.created_at > threshold]
 
 # %% [markdown]
 # - non significant words to remove
-stopwords = nltk.corpus.stopwords.words("english") 
-nonessential_words = ['twitter', 'birds','lists','list', 'source', 'am', 'pm', 'nan']
-stopwords.extend(nonessential_words) # merge two lists together
+nonessential_words = ['twitter', 'birds','lists','list', 'source', 'am', 'pm', 'nan'] + list(string.ascii_lowercase) + list(string.ascii_uppercase)
+stopwords = nltk.corpus.stopwords.words("english") + nonessential_words
 words_to_remove = sorted(list( dict.fromkeys(stopwords) )) # remove duplicates
 
 # %% [markdown]
@@ -67,16 +66,23 @@ words_to_remove = sorted(list( dict.fromkeys(stopwords) )) # remove duplicates
 # - digits
 # - extra spaces
 # - stopwords
+# - replace emoji
+# - translate to english from 186 languages Helsinki-NLP
+# - stemming similar words -> 'like' 'liked' 'liking' to 'like' 'like 'like'
 cleaned_text = clean_text(df_all_upperbound.text, words_to_remove)
 df_to_csv(df = cleaned_text, 
           folder = f'./data/merge/all_twitter_users/stats', 
           file = f'/cleaned_text.csv')
 
-# %%
+# %% [markdown] 
+# - Combine similar words to reduce Probability computation
+# - Vectorize with Word2vec | BERT | Tf-Idf
 # cluster similar words with word_to_vec and unsupervised clustering
-word_vector = Word2Vec(cleaned_text,size=100, min_count=1)
+# word_vector = Word2Vec(cleaned_text,size=100, min_count=1)
 
-# %%
+# %% [markdown]
+# - cluster and combine similar word vectors and replace original words
+# - kmeans | PCA | fuzzycmeans | tsne
 # emb_df = (
 #     pd.DataFrame(
 #         [word_vector.wv.get_vector(str(n)) for n in word_vector.wv.key_to_index],
@@ -89,10 +95,10 @@ word_vector = Word2Vec(cleaned_text,size=100, min_count=1)
 # fuzzy_c.fit(emb_df)
 
 # %%
-# N gram, frequency, and relative frequency
+# N gram, frequency, and relative frequency bag of words
 unigram_sentence, unigram_frequency, unigram_relative_frequency = n_gram(cleaned_text, 1)
 bigram_sentence, bigram_frequency, bigram_relative_frequency = n_gram(cleaned_text, 2)
-trigram_sentence, trigram_frequency, trigram_relative_frequency = n_gram(cleaned_text, 3)
+# trigram_sentence, trigram_frequency, trigram_relative_frequency = n_gram(cleaned_text, 3)
 
 # %%
 # probability matrix
@@ -107,8 +113,6 @@ trigram_sentence, trigram_frequency, trigram_relative_frequency = n_gram(cleaned
 # $$ P(W_{n}|W_{n-1}) =  \dfrac{C(W_{n-1}W{n})}{C(W{n-1})} $$
 unigram_prob = unigram_probability(cleaned_text, unigram_relative_frequency)
 bigram_prob = bigram_probability(bigram_sentence, unigram_frequency, bigram_frequency, cleaned_text)
-# %%
-print(bigram_prob)
 
 # %%
 # Adding probability and frequency to the dataframe
