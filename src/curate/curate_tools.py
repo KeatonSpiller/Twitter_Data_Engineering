@@ -4,8 +4,7 @@
 import os, glob, pandas as pd, numpy as np, re, texthero, collections, itertools, emoji, math
 from nltk.util import ngrams,everygrams,skipgrams
 from nltk.stem.snowball import SnowballStemmer
-from easynmt import EasyNMT
-
+from easynmt import EasyNMT, models
 def dataframe_astypes_curate():
     """_summary_
     
@@ -120,6 +119,40 @@ def merge_all(display):
                 file = '/all_twitter_users.csv')
     return df
 
+def batch_translate(x, model, chunk):
+        """_summary_
+            limit translation to (chunks) of text string length
+        Args:
+            x (Sentence string): Sentences of tokens seperated by spaces
+        Returns:
+            _type_: translated sentence of tokens seperated by spaces
+        """
+        sentence = ""
+        size = len(x)
+        start = 0
+        end = chunk
+        remaining = size
+        while( remaining >= chunk):
+            rnge = x[start:end]
+            sentence += model.translate(rnge, 
+                                        target_lang="en", 
+                                        show_progress_bar=False, 
+                                        max_length=chunk)
+            remaining -= chunk
+            start = end
+            end += chunk
+        if(size > end):
+            sentence += model.translate(x[end:size], 
+                                        target_lang="en", 
+                                        show_progress_bar=False, 
+                                        max_length=chunk)
+        else:
+            sentence += model.translate(x, 
+                                        target_lang="en", 
+                                        show_progress_bar=False, 
+                                        max_length=chunk)  
+        return sentence
+
 def clean_text(s, words_to_remove):
     """_summary_
     grab all words from every text file, removing spaces and non nessesary words from stop list
@@ -141,34 +174,15 @@ def clean_text(s, words_to_remove):
     # replace emoji
     s = s.apply(lambda s: emoji.replace_emoji(s, ''))
     
-    # translate to english from 186 languages Helsinki-NLP -> opus-mt | m2m_100_1.2B | mBART50_m2m
-    # opus-mt 512 token limit per sentence -> all others 1024 
-    # model = EasyNMT(model_name = "opus-mt")
-    # print(s.str.len().max())
-    # print(s.str.len().idxmax())
-    # print(s[s.str.len().idxmax()])
-    
-    # def sentence_overflow(x):
-    #     size = len(x)
-    #     sentence = []
-    #     if(size > 128):
-    #         sentence = model.translate(x[0:128], target_lang="en")
-    #         sentence = sentence + model.translate(x[128:size], target_lang="en", show_progress_bar=False)
-    #     else:
-    #        sentence = model.translate(x, target_lang="en", show_progress_bar=False)
-    #     return sentence 
-    
-    # s = s.apply(lambda x: sentence_overflow(x) )
-    # # chunk_size = math.ceil(s.str.len().max() / 512)
-    # # s = s.apply(lambda row: 
-    # #             list(model.translate_stream(row, 
-    # #                                         show_progress_bar=False, 
-    # #                                         target_lang="en",
-    # #                                         chunk_size=128)))
-    # print(s.str.len().max())
-    # print(s.str.len().idxmax())
-    # for translation in model.translate_stream(s, show_progress_bar=False, chunk_size=128, target_lang='en'):
-    #     print(translation)
+    # translate to english -> opus-mt | m2m_100_1.2B | mBART50_m2m
+    # opus-mt limited to sentence less than 512 -> all others less than 1024
+    # pre downloaded m2m_100_1.2B as translation_model
+    # model = EasyNMT(translator=models.AutoModel("data/translation_model"), 
+    #                 cache_folder='data/translation_model/cached',
+    #                 max_length=1024)
+    # print(f"{s.str.len().max()}: Largest string before translation, index:{s.str.len().idxmax()}")
+    # s = s.apply(lambda x: batch_translate(x, model, 512) )
+    # print(f"{s.str.len().max()}: Largest string before translation, index:{s.str.len().idxmax()}")
 
     # remove punctuation and library touch up
     s = texthero.clean(s)

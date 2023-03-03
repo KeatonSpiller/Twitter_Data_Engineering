@@ -73,8 +73,11 @@ def download_todays_test(ticker_df, df_normalized, df_original):
     todays_test = pd.merge(current_price, todays_data, how='inner', on='date')
     columns = list(ticker_df.ticker_label) + ['favorite_count', 'retweet_count']
     todays_test = normalize_columns_target(todays_test.copy(), df_original.copy(), columns)
-    
-    return todays_test
+    if(len(todays_test) > 0):
+        return todays_test
+    else:
+        print(f"Today's Tweets not yet downloaded")
+        return todays_test
 
 def create_target(df, day = 5, ticker= "SandP_500"):
     """_summary_
