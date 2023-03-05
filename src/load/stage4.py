@@ -3,10 +3,23 @@
 #       Summary Overview
 #   - load data into an amazon database
 
+# %%
+%env WR_DATABASE=default
+%env WR_CTAS_APPROACH=False
+%env WR_MAX_CACHE_SECONDS=900
+%env WR_MAX_CACHE_QUERY_INSPECTIONS=500
+%env WR_MAX_REMOTE_CACHE_ENTRIES=50
+%env WR_MAX_LOCAL_CACHE_ENTRIES=100
+
 # %% [markdown]
 ## Import Libraries
 import os,sys,pandas as pd,numpy as np, findspark, string, random, json, boto3, sqlite3, glob
+import awswrangler as wr
+from decimal import Decimal
 from pyspark.sql import SparkSession
+
+# %%
+wr.config
 
 # %% [markdown]
 # - Change Directory to top level folder
@@ -29,39 +42,51 @@ if not os.path.exists('.\src\load\key.json'):
     complex_password = randomize_key(randomize_from = -10, randomize_to = 10, size = 255, specified = DynamoDB_allowed)
     with open(".\src\load\key.json", "w") as fp:
         json.dump(complex_password, fp)
-        fp.close()
-        
+        fp.close()       
 with open(".\src\load\key.json", "r") as fp:
      b = json.load(fp)
     #  print(len(b))
      fp.close()
 
 # %%
-session = boto3.Session()
-s3 = session.client('s3')
-ddb = session.resource('dynamodb')
-dynamodb = boto3.session.Session(profile_name='dev').resource('dynamodb', endpoint_url='http://localhost:8000', region_name='us-east-1')
-table_name = 'courses'
-params = {
-    'TableName': table_name,
-    'KeySchema': [
-        {'AttributeName': 'id', 'KeyType': 'HASH'},
-        {'AttributeName': 'course', 'KeyType': 'RANGE'}
-    ],
-    'AttributeDefinitions': [
-        {'AttributeName': 'id', 'AttributeType': 'N'},
-        {'AttributeName': 'course', 'AttributeType': 'S'}
-    ],
-    'ProvisionedThroughput': {
-        'ReadCapacityUnits': 10,
-        'WriteCapacityUnits': 10
-    }
-}
-table = dynamodb.create_table(**params)
-print("Table status:", table.table_status)
-print(f"Creating {table_name}...")
-table.wait_until_exists()
+path_todays_test = f'./data/merge/combined'
+df_merge = pd.read_csv(path_todays_test +'/tickers_and_twitter_users.csv')
 
+# %%
+# Load AWS access codes
+aws_access_df = pd.read_csv('./user_input/aws_access.csv', dtype=str, header=0)
+
+# %%
+def boto3_df_schema(df):
+    # float, int, bool, datetime64[ns], timedelta[ns], and object
+    # currently not converting for datetime or timedelta
+    number_attributes = list(df.columns[df.dtypes == 'float64']) + list(df_merge.columns[df_merge.dtypes == 'int64'])
+    string_attributes = list(df.columns[df.dtypes == 'object'])
+    bool_attributes = list(df.columns[df.dtypes == 'bool'])
+    keyschema,attributedefinitions = [],[]
+    for key in string_attributes:
+        keyschema.append({'AttributeName':str(key), 'KeyType': "HASH"})
+        attributedefinitions.append({'AttributeName':str(key), 'AttributeType': "S"})
+    for key in number_attributes:
+        keyschema.append({'AttributeName':str(key), 'KeyType': "RANGE"})
+        attributedefinitions.append({'AttributeName':str(key), 'AttributeType': "N"})
+    for key in bool_attributes:
+        keyschema.append({'AttributeName':str(key), 'KeyType': "RANGE"})
+        attributedefinitions.append({'AttributeName':str(key), 'AttributeType': "B"})
+    return keyschema, attributedefinitions
+
+# %%
+dynamodb = boto3.client('dynamodb')
+keyschema, attributedefinitions = boto3_df_schema(df_merge)
+print(list(keyschema))
+# [B, N, S] data types
+dynamodb.create_table( 
+    TableName = "twitter_ticker_merge",
+    KeySchema = keyschema,
+    AttributeDefinitions = attributedefinitions
+)
+# wr.dynamodb.put_df(df = pd.DataFrame({'sandwich':1},index=[0]),
+#                    table_name='test2')
 
 # %%   
 # def df_to_Sqlite3(tablename, df, db_file):
@@ -84,8 +109,6 @@ table.wait_until_exists()
 #             conn.close()
 
 # %%
-path_todays_test = f'./data/merge/combined'
-df_merge = pd.read_csv(path_todays_test +'/index_funds_and_twitter_analysts.csv', parse_dates=['date']).set_index('date')
 
 with open(os.path.normpath(os.getcwd() + './user_input/user_list.xlsx'), 'rb') as f:
     user_df = pd.read_excel(f, sheet_name='user_names')
