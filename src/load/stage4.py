@@ -1,15 +1,13 @@
 # %% [markdown]
 ## Data Load
 #       Summary Overview
-#   - load data into an dynamodb
-
-# %%
-%env WR_DATABASE=default
-%env WR_CTAS_APPROACH=False
-%env WR_MAX_CACHE_SECONDS=900
-%env WR_MAX_CACHE_QUERY_INSPECTIONS=500
-%env WR_MAX_REMOTE_CACHE_ENTRIES=50
-%env WR_MAX_LOCAL_CACHE_ENTRIES=100
+#   - Load data
+#   - pivot to tall
+#   - generate uuid keys
+#   - Create Table Schema dynamodb
+#   - loop throught dataframe and Put each row to NOSQL Table
+#   - Goal -> 
+#   - functionize this process and repeat for all csv files in data folder
 
 # %% [markdown]
 ## Import Libraries
@@ -120,7 +118,7 @@ for index, row in df_tall.iterrows():
                     )
 
 # %%
-# sqlite
+# sqlite Localized approach to Database storing in python
 # def df_to_Sqlite3(tablename, df, db_file):
 #     """ create a database connection to a database that resides
 #         in the memory
@@ -155,15 +153,17 @@ for index, row in df_tall.iterrows():
 
 # %% [markdown]
 ## Spark
-os.environ["JAVA_HOME"] = "C:\Program Files\Java\jdk-19"
-os.environ["SPARK_HOME"] = "C:\spark"
-findspark.init()
-spark = SparkSession.builder.master("local[*]").getOrCreate()
-spark.conf.set("spark.sql.repl.eagerEval.enabled", True) # Property used to format output tables better
-twitterdf = spark.createDataFrame(df_merge)
+# Optimized Database/Inner workings of clusters SQL 10x faster Hadoop/Apache
+# os.environ["JAVA_HOME"] = "C:\Program Files\Java\jdk-19"
+# os.environ["SPARK_HOME"] = "C:\spark"
+# findspark.init()
+# spark = SparkSession.builder.master("local[*]").getOrCreate()
+# spark.conf.set("spark.sql.repl.eagerEval.enabled", True) # Property used to format output tables better
+# twitterdf = spark.createDataFrame(df_merge)
 
 # %%
 # Generate encrypted Key
+# ||Previously thought I needed this to generate a custom encrypted key for database keys||
 if not os.path.exists('.\src\load\key.json'):
     DynamoDB_allowed = string.ascii_letters + string.digits + '-._'
     complex_password = randomize_key(randomize_from = -10, randomize_to = 10, size = 255, specified = DynamoDB_allowed)
