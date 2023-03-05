@@ -1,7 +1,7 @@
 # %% [markdown]
 ## Data Load
 #       Summary Overview
-#   - load data into an amazon database
+#   - load data into an dynamodb
 
 # %%
 %env WR_DATABASE=default
@@ -13,13 +13,9 @@
 
 # %% [markdown]
 ## Import Libraries
-import os,sys,pandas as pd,numpy as np, findspark, string, random, json, boto3, sqlite3, glob
-import awswrangler as wr
+import os,sys,pandas as pd,numpy as np, findspark, string, random, json, boto3, sqlite3, glob, uuid
 from decimal import Decimal
 from pyspark.sql import SparkSession
-
-# %%
-wr.config
 
 # %% [markdown]
 # - Change Directory to top level folder
@@ -33,20 +29,15 @@ if(os.getcwd().split(os.sep)[-1] != top_level_folder):
         
 # %% [markdown]
 ## Load Custom functions
-from src.load.load_tools import *
+from src.load.load_tools import randomize_key, df_to_csv
 
 # %%
-# Create a passcode for DynamoDB Table
-if not os.path.exists('.\src\load\key.json'):
-    DynamoDB_allowed = string.ascii_letters + string.digits + '-._'
-    complex_password = randomize_key(randomize_from = -10, randomize_to = 10, size = 255, specified = DynamoDB_allowed)
-    with open(".\src\load\key.json", "w") as fp:
-        json.dump(complex_password, fp)
-        fp.close()       
-with open(".\src\load\key.json", "r") as fp:
-     b = json.load(fp)
-    #  print(len(b))
-     fp.close()
+# Read in twitter User's
+with open(os.path.normpath(os.getcwd() + './user_input/user_list.xlsx'), 'rb') as f:
+    user_df = pd.read_excel(f, sheet_name='user_names')
+    user_df = user_df.where(pd.notnull(user_df), '')
+    f.close()
+groups = list(user_df.columns)
 
 # %%
 path_todays_test = f'./data/merge/combined'
@@ -57,38 +48,79 @@ df_merge = pd.read_csv(path_todays_test +'/tickers_and_twitter_users.csv')
 aws_access_df = pd.read_csv('./user_input/aws_access.csv', dtype=str, header=0)
 
 # %%
-def boto3_df_schema(df):
-    # float, int, bool, datetime64[ns], timedelta[ns], and object
-    # currently not converting for datetime or timedelta
-    number_attributes = list(df.columns[df.dtypes == 'float64']) + list(df_merge.columns[df_merge.dtypes == 'int64'])
-    string_attributes = list(df.columns[df.dtypes == 'object'])
-    bool_attributes = list(df.columns[df.dtypes == 'bool'])
-    keyschema,attributedefinitions = [],[]
-    for key in string_attributes:
-        keyschema.append({'AttributeName':str(key), 'KeyType': "HASH"})
-        attributedefinitions.append({'AttributeName':str(key), 'AttributeType': "S"})
-    for key in number_attributes:
-        keyschema.append({'AttributeName':str(key), 'KeyType': "RANGE"})
-        attributedefinitions.append({'AttributeName':str(key), 'AttributeType': "N"})
-    for key in bool_attributes:
-        keyschema.append({'AttributeName':str(key), 'KeyType': "RANGE"})
-        attributedefinitions.append({'AttributeName':str(key), 'AttributeType': "B"})
-    return keyschema, attributedefinitions
+wide_col = list(df_merge.columns[1:])
+df_merge.head()
+
+# %%
+# dynamodb has a limit of 1024KB per row aggregated
+# the wide columns I have the df_merge in are too large
+# Therefore melting the wide columns to tall/long
+df_tall = pd.melt(df_merge, 
+                  id_vars='date', 
+                  value_vars=wide_col,
+                  var_name = 'twitter_ticker')
 
 # %%
 dynamodb = boto3.client('dynamodb')
-keyschema, attributedefinitions = boto3_df_schema(df_merge)
-print(list(keyschema))
 # [B, N, S] data types
-dynamodb.create_table( 
-    TableName = "twitter_ticker_merge",
-    KeySchema = keyschema,
-    AttributeDefinitions = attributedefinitions
-)
-# wr.dynamodb.put_df(df = pd.DataFrame({'sandwich':1},index=[0]),
-#                    table_name='test2')
+existing_tables = dynamodb.list_tables()['TableNames']
+# Create table
+try:
+    dynamodb.create_table(
+        TableName = "twitter_ticker_merge",
+        KeySchema =[
+                {
+                    'AttributeName': 'uuid', # Universally unique identifier
+                    'KeyType': 'HASH'
+                }
+        ],
+        AttributeDefinitions = [
+                {
+                    'AttributeName': 'uuid', # Universally unique identifier
+                    'AttributeType': 'S'
+                }
+        ],
+        BillingMode='PROVISIONED',
+        ProvisionedThroughput = {
+                                    'ReadCapacityUnits': 1,
+                                    'WriteCapacityUnits': 1
+                                }
+    )
+except dynamodb.exceptions.ResourceInUseException:
+    print(f'Table exists!')
+    pass
 
-# %%   
+# %%
+# Put table to database
+# do we want to keep the previous uuid key's from past dataframes?
+# or rewrite with new uuid keys each time
+if(os.path.exists(f'./data/merge/combined/tickers_and_twitter_users_tall.csv')):
+    df_tall_prev = pd.read_csv(f'./data/merge/combined/tickers_and_twitter_users_tall.csv')
+    # If the current df_tall is the same as the previously saved df
+    if(len(df_tall_prev) == len(df_tall)):
+        df_tall = df_tall_prev
+    else:
+        # create new uuid for newly added entries
+        df_tall['uuid'] = pd.concat([df_tall_prev['uuid'], df_tall[len(df_tall_prev):].index.to_series().map(lambda x: uuid.uuid4())], axis=0)
+else:
+    df_tall['uuid'] = df_tall.index.to_series().map(lambda x: uuid.uuid4())
+    df_to_csv(df=df_tall,
+                file=f'tickers_and_twitter_users_tall.csv',
+                folder=f'./data/merge/combined/')
+for index, row in df_tall.iterrows():
+    data = dict(row)
+    dynamodb.put_item(  TableName = "twitter_ticker_merge",
+                        Item =
+                        {
+                            "uuid": {'S':str(data['uuid'])},
+                            'date': {'S':str(data['date'])},
+                            'twitter_ticker':{'S':str(data['twitter_ticker'])},
+                            'value': {'N':str(data['value'])}
+                        }
+                    )
+
+# %%
+# sqlite
 # def df_to_Sqlite3(tablename, df, db_file):
 #     """ create a database connection to a database that resides
 #         in the memory
@@ -107,15 +139,7 @@ dynamodb.create_table(
 #     finally:
 #         if conn:
 #             conn.close()
-
-# %%
-
-with open(os.path.normpath(os.getcwd() + './user_input/user_list.xlsx'), 'rb') as f:
-    user_df = pd.read_excel(f, sheet_name='user_names')
-    user_df = user_df.where(pd.notnull(user_df), '')
-    f.close()
-groups = list(user_df.columns)
-
+#
 # for group in groups:
 #     csv_files = glob.glob(os.path.join('./data/'+group, "*.csv"))
 #     df = pd.DataFrame()
@@ -129,50 +153,24 @@ groups = list(user_df.columns)
 # test = pd.read_sql('select * from biancoresearch_twitter', conn)
 # print(test) 
 
-# %%   
-# Boto3 load into dataframe
-# print(pd.io.json.build_table_schema(df_merge)) 
-# dynamodb = boto3.resource('dynamodb')
-
-# table = dynamodb.create_table(
-#     TableName = 'twitterticker',
-#     pd.io.json.build_table_schema(df_merge)
-# )
-
-# table.meta.client.get_waiter('table_exists').wait(TableName='twitterticker')
-     
-# print(table.item_count)
-     
 # %% [markdown]
-## to Spark Database
-# %%
+## Spark
 os.environ["JAVA_HOME"] = "C:\Program Files\Java\jdk-19"
 os.environ["SPARK_HOME"] = "C:\spark"
-
-# %%
 findspark.init()
 spark = SparkSession.builder.master("local[*]").getOrCreate()
 spark.conf.set("spark.sql.repl.eagerEval.enabled", True) # Property used to format output tables better
-spark
-
-#%%
 twitterdf = spark.createDataFrame(df_merge)
-# print(df_merge.columns)
-
-# # Create an in-memory DataFrame to query
-# twitterdf.createOrReplaceTempView("twitter_ticker")
-
-# # Query
-# top_twitter = spark.sql(
-# """SELECT count(*)
-#     FROM twitter_ticker 
-#     WHERE violation_type = 'RED' 
-#     GROUP BY name 
-#     ORDER BY total_red_violations DESC LIMIT 10""")
-
-# #         # Write the results to the specified output URI
-# #         top_red_violation_restaurants.write.option("header", "true").mode("overwrite").csv(output_uri)
-
-
 
 # %%
+# Generate encrypted Key
+if not os.path.exists('.\src\load\key.json'):
+    DynamoDB_allowed = string.ascii_letters + string.digits + '-._'
+    complex_password = randomize_key(randomize_from = -10, randomize_to = 10, size = 255, specified = DynamoDB_allowed)
+    with open(".\src\load\key.json", "w") as fp:
+        json.dump(complex_password, fp)
+        fp.close()       
+with open(".\src\load\key.json", "r") as fp:
+     b = json.load(fp)
+    #  print(len(b))
+     fp.close()
