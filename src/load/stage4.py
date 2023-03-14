@@ -37,32 +37,35 @@ with open(os.path.normpath(os.getcwd() + './user_input/user_list.xlsx'), 'rb') a
     f.close()
 groups = list(user_df.columns)
 
-# %%
+# read in twitter and ticker combined csv files
 path_todays_test = f'./data/merge/combined'
 df_merge = pd.read_csv(path_todays_test +'/tickers_and_twitter_users.csv')
 
-# %%
 # Load AWS access codes
 aws_access_df = pd.read_csv('./user_input/aws_access.csv', dtype=str, header=0)
+# %%
+# wide dataset
+# Amazon keyspaces | Google Big Table 
+
 
 # %%
-wide_col = list(df_merge.columns[1:])
-df_merge.head()
+# document databse MongoDB | Amazon DocumentDB (with MongoDB compatibility)
 
 # %%
-# dynamodb has a limit of 1024KB per row aggregated
-# the wide columns I have the df_merge in are too large
-# Therefore melting the wide columns to tall/long
+# Key Value Database
+# dynamodb has a limit of 1024KB per row aggregated -> wide database had over ~ 4-5 KB per how
+# Therefore melting wide columns to tall/long
 df_tall = pd.melt(df_merge, 
                   id_vars='date', 
-                  value_vars=wide_col,
+                  value_vars=list(df_merge.columns[1:]),
                   var_name = 'twitter_ticker')
 
 # %%
+# Create table [B, N, S] Bool/Number/String data types
+# Provisioned or On Demand dynamodb capacity modes, chose provisioned to utilize free storage
+# Could increase the Read/write capacity and utilize auto scaling
 dynamodb = boto3.client('dynamodb')
-# [B, N, S] data types
 existing_tables = dynamodb.list_tables()['TableNames']
-# Create table
 try:
     dynamodb.create_table(
         TableName = "twitter_ticker_merge",
@@ -89,9 +92,7 @@ except dynamodb.exceptions.ResourceInUseException:
     pass
 
 # %%
-# Put table to database
-# do we want to keep the previous uuid key's from past dataframes?
-# or rewrite with new uuid keys each time
+# Check previous saved keys and generate keys for new entries
 if(os.path.exists(f'./data/merge/combined/tickers_and_twitter_users_tall.csv')):
     df_tall_prev = pd.read_csv(f'./data/merge/combined/tickers_and_twitter_users_tall.csv')
     # If the current df_tall is the same as the previously saved df
@@ -105,6 +106,9 @@ else:
     df_to_csv(df=df_tall,
                 file=f'tickers_and_twitter_users_tall.csv',
                 folder=f'./data/merge/combined/')
+    
+# %%
+# Put table to database
 for index, row in df_tall.iterrows():
     data = dict(row)
     dynamodb.put_item(  TableName = "twitter_ticker_merge",

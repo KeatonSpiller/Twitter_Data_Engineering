@@ -1,7 +1,7 @@
 # Changelog
 This file contains the notable changes to the project
 
-Version 1.0.0 (01-10-2022)
+Version 1.0.0 (01-10-2023)
 ## New
     - Automated tweet preperation and processing of incoming long-term and short-term 
         financial analyst tweets using Tweepy's (api.user_timeline())
@@ -42,7 +42,7 @@ Version 1.0.0 (01-10-2022)
     - may need to sensor the twitter data in future versions
 
 
-Version 1.0.1 (01-25-2022)
+Version 1.0.1 (01-25-2023)
 
 ## Changes 
     - Updated File Structure of project
@@ -61,7 +61,7 @@ Version 1.0.1 (01-25-2022)
 ## New
     - nested '__init__.py' files to organize tweepy_functions in preparation stage
 
-Version 1.0.2 (01-30-2022)
+Version 1.0.2 (01-30-2023)
 ## New
 
     - Added Excel file to download any user in the file with correct twitter tag
@@ -73,7 +73,7 @@ Version 1.0.2 (01-30-2022)
     - min max normalized the index funds and like/favorite counts
     - predicted market for all index funds running seperate linear models
 
-Version 1.0.3 (02-13-2022)
+Version 1.0.3 (02-13-2023)
 ## New
 
     - Revamped the project from Sentiment Analysis to Data Engineering pipeline
@@ -90,4 +90,23 @@ Version 1.0.3 (02-13-2022)
     - Plan on chaning the Twitter downloads to append to previous csv files, and not redownload historical data
     - Plan on chaning the Twitter downloads to append to previous csv files, and not redownload historical data
     - Also plan on deploying as a docker file aswell
+
+Version 1.0.4 (03-14-2023)
     
+## New
+
+    - Tweet bigram and Unigram probabilites
+    - Loaded into dynamodb Tall database for final csv
+
+## Upcoming
+    
+    - Pandas 2.0 integration with pyarrow 30x performance increase
+    - Update csv UTF-8 files to parquet binary files for faster reading/writing and smaller downloads
+    - English translation with EasyNMT
+    - Compression/encryption
+    - word2vec and kmeans/PCA clustering of Ngram probabilities
+    - Trigram probabilites
+    - Complete load of all datasets
+    - Complete exe/Docker deployment
+    - Load wide database Apache cassandra
+    - Build a relational database

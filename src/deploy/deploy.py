@@ -1,14 +1,21 @@
 # %% [markdown]
-## Import Libraries
-import os,sys
+## Data Deployment
+#   Summary Overview
+#   - Parse, Curate, Condition, and Load
 
-## Change Directory to root
-# %%
-file = os.getcwd().split(os.sep)
-while(file[-1] != 'twitter_app'): # Check the working directory
-    os.chdir('..')
-    file = os.getcwd().split(os.sep)
-    sys.path.append(os.path.abspath(os.getcwd()))
+# %% [markdown]
+## Import Libraries
+import os
+
+# %% [markdown]
+# - Change Directory to top level folder
+top_level_folder = 'twitter_app'
+if(os.getcwd().split(os.sep)[-1] != top_level_folder):
+    try:
+        os.chdir('../..')
+        print(f"cwd: {os.getcwd()}", sep = '\n')
+    except Exception as e:
+        print(f"{e}\n:start current working directory from {top_level_folder}")
 
 from src.parse import stage1
 from src.curate import stage2
